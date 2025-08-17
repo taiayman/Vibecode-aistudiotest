@@ -4,7 +4,20 @@
 */
 import {GoogleGenAI} from '@google/genai'
 
-const ai = new GoogleGenAI({apiKey: process.env.API_KEY})
+let ai
+
+function getAiClient() {
+  if (!process.env.API_KEY) {
+    throw new Error(
+      'API_KEY environment variable not set. Please set it in your Vercel project settings.'
+    )
+  }
+  if (!ai) {
+    ai = new GoogleGenAI({apiKey: process.env.API_KEY})
+  }
+  return ai
+}
+
 const model = 'veo-2.0-generate-001'
 
 export default async function generateVideo(prompt, onProgress) {
@@ -25,7 +38,9 @@ export default async function generateVideo(prompt, onProgress) {
 
   onProgress(loadingMessages[messageIndex++])
 
-  let operation = await ai.models.generateVideos({
+  const aiClient = getAiClient()
+
+  let operation = await aiClient.models.generateVideos({
     model,
     prompt,
     config: {
@@ -33,18 +48,17 @@ export default async function generateVideo(prompt, onProgress) {
     }
   })
 
-  const progressInterval = setInterval(
-    () => {
-      onProgress(loadingMessages[messageIndex % loadingMessages.length])
-      messageIndex++
-    },
-    8000
-  )
+  const progressInterval = setInterval(() => {
+    onProgress(loadingMessages[messageIndex % loadingMessages.length])
+    messageIndex++
+  }, 8000)
 
   try {
     while (!operation.done) {
       await new Promise(resolve => setTimeout(resolve, 10000))
-      operation = await ai.operations.getVideosOperation({operation: operation})
+      operation = await aiClient.operations.getVideosOperation({
+        operation: operation
+      })
     }
 
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri
