@@ -2,92 +2,65 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import {GoogleGenAI, Modality} from '@google/genai'
-import {limitFunction} from 'p-limit'
+import {GoogleGenAI} from '@google/genai'
 
-const timeoutMs = 193_333
-const maxRetries = 5
-const baseDelay = 1_233
-const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY})
+const ai = new GoogleGenAI({apiKey: process.env.API_KEY})
+const model = 'veo-2.0-generate-001'
 
-export default limitFunction(
-  async ({
+export default async function generateVideo(prompt, onProgress) {
+  const loadingMessages = [
+    'Warming up the AI director...',
+    'Scripting the digital scene...',
+    'Casting pixel actors...',
+    'Rolling the virtual cameras...',
+    'Action! Generating motion...',
+    'Rendering the first frames...',
+    'Applying digital makeup...',
+    'In the cutting room now...',
+    'Adding special effects...',
+    'Finalizing the masterpiece...',
+    'Almost ready for the premiere!'
+  ]
+  let messageIndex = 0
+
+  onProgress(loadingMessages[messageIndex++])
+
+  let operation = await ai.models.generateVideos({
     model,
-    systemInstruction,
     prompt,
-    promptImage,
-    imageOutput,
-    thinking,
-    thinkingCapable
-  }) => {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), timeoutMs)
-        )
-
-        const modelPromise = ai.models.generateContent({
-          model,
-          config: {
-            systemInstruction,
-            safetySettings,
-            ...(thinkingCapable && !thinking
-              ? {thinkingConfig: {thinkingBudget: 0}}
-              : {}),
-            ...(imageOutput
-              ? {responseModalities: [Modality.TEXT, Modality.IMAGE]}
-              : {})
-          },
-
-          contents: [
-            {
-              parts: [
-                ...(promptImage
-                  ? [
-                      {
-                        inlineData: {
-                          data: promptImage.split(',')[1],
-                          mimeType: 'image/png'
-                        }
-                      }
-                    ]
-                  : []),
-                {text: prompt}
-              ]
-            }
-          ]
-        })
-
-        return Promise.race([modelPromise, timeoutPromise]).then(res =>
-          imageOutput
-            ? 'data:image/png;base64,' +
-              res.candidates[0].content.parts.find(p => p.inlineData).inlineData
-                .data
-            : res.text
-        )
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          return
-        }
-
-        if (attempt === maxRetries - 1) {
-          throw error
-        }
-
-        const delay = baseDelay * 2 ** attempt
-        await new Promise(res => setTimeout(res, delay))
-        console.warn(
-          `Attempt ${attempt + 1} failed, retrying after ${delay}ms...`
-        )
-      }
+    config: {
+      numberOfVideos: 1
     }
-  },
-  {concurrency: 9}
-)
+  })
 
-const safetySettings = [
-  'HARM_CATEGORY_HATE_SPEECH',
-  'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-  'HARM_CATEGORY_DANGEROUS_CONTENT',
-  'HARM_CATEGORY_HARASSMENT'
-].map(category => ({category, threshold: 'BLOCK_NONE'}))
+  const progressInterval = setInterval(
+    () => {
+      onProgress(loadingMessages[messageIndex % loadingMessages.length])
+      messageIndex++
+    },
+    8000
+  )
+
+  try {
+    while (!operation.done) {
+      await new Promise(resolve => setTimeout(resolve, 10000))
+      operation = await ai.operations.getVideosOperation({operation: operation})
+    }
+
+    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri
+    if (!downloadLink) {
+      throw new Error('Video generation failed or returned no link.')
+    }
+
+    onProgress('Downloading your video...')
+    const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`)
+    if (!response.ok) {
+      throw new Error(`Failed to download video: ${response.statusText}`)
+    }
+
+    const blob = await response.blob()
+    return URL.createObjectURL(blob)
+  } finally {
+    clearInterval(progressInterval)
+  }
+}

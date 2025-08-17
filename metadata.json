@@ -1,5 +1,5 @@
 {
-  "name": "Copy of VibeCheck",
-  "description": "Quickly batch test prompts with visual outputs.",
+  "name": "VidGen",
+  "description": "Generate short videos from text prompts, powered by AI.",
   "requestFramePermissions": []
 }

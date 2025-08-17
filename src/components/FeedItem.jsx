@@ -2,67 +2,81 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import {useState} from 'react'
-import c from 'clsx'
-import {addRound, removeRound} from '../lib/actions'
-import modes from '../lib/modes'
-import ModelOutput from './ModelOutput'
+import {useState, useRef, useEffect} from 'react'
+import {removeVideo} from '../lib/actions'
+import Loader from './ModelOutput' // Was ModelOutput.jsx, now it is Loader.jsx
 
-export default function FeedItem({round, onModifyPrompt}) {
-  const [showSystemInstruction, setShowSystemInstruction] = useState(false)
+export default function VideoPost({video}) {
+  const {id, prompt, isBusy, videoUrl, error, loadingMessage} = video
+  const [isMuted, setIsMuted] = useState(true)
+  const videoRef = useRef(null)
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted
+    }
+  }, [isMuted])
+
+  const toggleMute = e => {
+    e.stopPropagation()
+    setIsMuted(!isMuted)
+  }
 
   return (
-    <li key={round.id}>
-      <div className={c('header', {anchorTop: showSystemInstruction})}>
-        <h3 className={c({anchorTop: showSystemInstruction})}>
-          <div className="chip">
-            {modes[round.outputMode].emoji} {modes[round.outputMode].name}
-          </div>
-          <div className="prompt">
-            {showSystemInstruction && (
-              <p className="systemInstruction">{round.systemInstruction}</p>
-            )}
-            <p>{round.prompt}</p>
-          </div>
-        </h3>
-        <div className="actions">
-          <button
-            className="iconButton"
-            onClick={() => setShowSystemInstruction(!showSystemInstruction)}
-          >
-            <span className="icon">assignment</span>
-            <span className="tooltip">
-              {showSystemInstruction ? 'Hide' : 'Show'} system instruction
-            </span>
-          </button>
-
-          <button className="iconButton" onClick={() => removeRound(round.id)}>
-            <span className="icon">delete</span>
-            <span className="tooltip">Remove</span>
-          </button>
-
-          <button
-            className="iconButton"
-            onClick={() => onModifyPrompt(round.prompt)}
-          >
-            <span className="icon">edit</span>
-            <span className="tooltip">Modify prompt</span>
-          </button>
-
-          <button className="iconButton" onClick={() => addRound(round.prompt)}>
-            <span className="icon">refresh</span>
-            <span className="tooltip">Re-run prompt</span>
-          </button>
+    <li className="video-post">
+      {isBusy && <Loader message={loadingMessage} />}
+      {error && (
+        <div className="error-overlay">
+          <span className="icon">error</span>
+          <p>Generation Failed</p>
+          <p className="error-message">{error}</p>
         </div>
-      </div>
-
-      <ul className="outputs">
-        {round.outputs.map(output => (
-          <li key={output.id}>
-            <ModelOutput {...output} />
-          </li>
-        ))}
-      </ul>
+      )}
+      {videoUrl && (
+        <>
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            autoPlay
+            loop
+            playsInline
+            muted
+            className="video-player"
+          />
+          <div className="video-overlay">
+            <div className="video-info">
+              <h3>@vidgen_ai</h3>
+              <p>{prompt}</p>
+            </div>
+            <div className="video-actions">
+              <button className="action-button">
+                <span className="icon">favorite</span>
+                <span>Like</span>
+              </button>
+              <button className="action-button">
+                <span className="icon">comment</span>
+                <span>Comment</span>
+              </button>
+              <button
+                className="action-button"
+                onClick={() => navigator.clipboard.writeText(prompt)}
+              >
+                <span className="icon">share</span>
+                <span>Share</span>
+              </button>
+              <button className="action-button" onClick={() => removeVideo(id)}>
+                <span className="icon">delete</span>
+                <span>Delete</span>
+              </button>
+              <button className="action-button" onClick={toggleMute}>
+                <span className="icon">
+                  {isMuted ? 'volume_off' : 'volume_up'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </li>
   )
 }
